@@ -21,7 +21,7 @@ public class LoginQueuePlayerListener extends org.bukkit.event.player.PlayerList
 		Player player = event.getPlayer();
 		String playerName = player.getName();
 
-		if(player.isOp() || p.reserveList.contains(playerName) || p.fileReserveList.contains(playerName)) {
+		if(player.isOp() || p.reserveList.contains(playerName) || p.fileReserveList.contains(playerName) || p.hasPermission(player, "LoginQueue.override") ) {
 			return;
 		}
 		

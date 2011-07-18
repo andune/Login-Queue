@@ -8,6 +8,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -26,14 +27,21 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
 
 import org.bukkit.Server;
+import org.bukkit.command.CommandSender;
+import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event.Priority;
 import org.bukkit.event.Event.Type;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
+
+import com.nijiko.permissions.PermissionHandler;
+import com.nijikokun.bukkit.Permissions.Permissions;
 
 public class LoginQueue extends JavaPlugin {
 
-	Logger log = Logger.getLogger("Minecraft");
+	final static Logger log = Logger.getLogger("Minecraft");
+	final static String logPrefix = "[LoginQueue] ";
 
 	LoginQueue p = this;
 
@@ -62,9 +70,12 @@ public class LoginQueue extends JavaPlugin {
 	AtomicInteger serverPopulation = new AtomicInteger(0);
 
 	AtomicString reserveFileLocation = new AtomicString();
-
+	
 	PlayerPollingTimer pollingThread;
 
+	Map<String, Integer> groupLimits = new HashMap<String, Integer>();
+    private PermissionHandler permissionHandler;
+    
 	public void onDisable() {
 
 		if(pollingThread != null) {
@@ -81,7 +92,9 @@ public class LoginQueue extends JavaPlugin {
 
 	public void onEnable() {
 
-		log.info("Login Queue Started");
+		log.info(logPrefix + " Started");
+		
+		initPermissions();
 
 		File file = getDataFolder();
 
@@ -92,6 +105,16 @@ public class LoginQueue extends JavaPlugin {
 		MyPropertiesFile pf = new MyPropertiesFile(new File(file, "login_queue.txt").toString());
 		pf.load();
 
+		for(int i=0; i < 5; i++) {
+			String groupName = pf.getString("group"+i+".name");
+			int groupLimit = pf.getInt("group"+i+".limit", 0);
+			
+			// if it's not an empty string, then store this group
+			if( groupName != null && !groupName.isEmpty() ) {
+				groupLimits.put(groupName,  groupLimit);
+			}
+		}
+		
 		logoutDwellTime.set(pf.getInt("logout_dwell_timeout", 120));
 		queueDwellTime.set(pf.getInt("queue_dwell_timeout", 600));
 		eligibleDwellTime.set(pf.getInt("eligible_dwell_timeout", 300));
@@ -188,6 +211,32 @@ public class LoginQueue extends JavaPlugin {
 			fileReserveList.add(name);
 		}
 	}
+	
+    /** Initialize permission system.
+     * 
+     */
+    private void initPermissions() {
+        Plugin permissionsPlugin = getServer().getPluginManager().getPlugin("Permissions");
+        if( permissionsPlugin != null )
+        	permissionHandler = ((Permissions) permissionsPlugin).getHandler();
+        else
+	    	log.warning(logPrefix+" Permissions system not enabled, using isOP instead.");
+    }
+    
+    public boolean hasPermission(CommandSender sender, String permissionNode) {
+		if( sender instanceof ConsoleCommandSender )
+			return true;
+		
+		if( sender instanceof Player ) {
+	    	if( permissionHandler != null ) 
+	    		return permissionHandler.has((Player) sender, permissionNode);
+	    	else
+	    		return sender.isOp();
+		}
+		
+		return false;
+    }
+		
 
 	class PlayerPollingTimer extends Thread {
 
